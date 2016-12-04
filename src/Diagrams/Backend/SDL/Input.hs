@@ -7,40 +7,22 @@
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE ViewPatterns          #-}
 
-module Diagrams.SDL.Input where
+module Diagrams.Backend.SDL.Input where
 
-import           Control.Concurrent
-import           Control.Exception
 import           Control.Lens
+import           Control.Monad.State hiding (get)
 import           Data.Bits.Lens
-import           Data.Bool
-import qualified Data.ByteString      as BS
 import           Data.Default
-import           Data.Fixed           (mod')
-import qualified Data.Foldable        as F
-import           Data.Map             (Map)
-import qualified Data.Map             as Map
-import           Data.Maybe           (fromMaybe, isJust)
-import           Data.Semigroup
-import           Data.Set             (Set)
-import           Data.Typeable
-import qualified Data.Vector.Storable as S
-import           Foreign              hiding (rotate)
-import           Foreign.C.String
-import           Linear.Affine
-import           System.FilePath      ((</>))
-
-import           Control.Monad        (unless, when)
-import           Control.Monad.State  hiding (get)
-import           Data.Distributive
-import           Data.StateVar
-import           Foreign.C
+import           Data.Map            (Map)
+import           Data.Maybe          (fromMaybe, isJust)
+import           Data.Set            (Set)
+import           Foreign             hiding (rotate)
 import           Linear
-import qualified SDL.Raw              as SDL
-import           SDL.Raw.Enum
-import           SDL.Raw.Types        hiding (Point, fingerX, fingerY)
+import           Linear.Affine
 
-import           Diagrams.Backend.GL
+import qualified SDL.Raw             as SDL
+import           SDL.Raw.Enum
+import           SDL.Raw.Types       hiding (Point, fingerX, fingerY)
 
 ------------------------------------------------------------------------
 -- Input handling
@@ -185,18 +167,10 @@ handleInputEvent = \case
     | mouse /= SDL_TOUCH_MOUSEID ->
         mouseWheel += V2 x y
 
-  MultiGestureEvent eventType time touchID
+  MultiGestureEvent _ _ touchID
     (r2f -> dTheta)
     (r2f -> dDist)
     (r2f -> x) (r2f -> y) 2 -> do
-    -- mDevice    ?= touchID
-    -- multiZoom  += realToFrac dDist
-    -- multiAngle += realToFrac dTheta
-    -- multiX     += realToFrac x
-    -- multiY     += realToFrac y
---
--- MULTI TOUCH ---------------------------------------------------------
-
 
     let -- see if a multigesture has moved enough in some parameter to
         -- decided which gesture to use
@@ -236,11 +210,9 @@ handleInputEvent = \case
         confirmFingers fs $ do
           multiGesture .= RotateGesture fs (r + dTheta)
 
-------------------------------------------------------------------------
-
-  TouchFingerEvent eventType time touchID fingerID x y dx dy p -> do
-    fingers . at fingerID %= \mfinger ->
-      case eventType of
+  TouchFingerEvent eType _ touchID fingerId x y dx dy _ -> do
+    fingers . at fingerId %= \mfinger ->
+      case eType of
         SDL_FINGERUP   -> Nothing
         _              -> Just $
           fromMaybe (FingerInfo touchID zero zero) mfinger &~ do
@@ -265,8 +237,8 @@ pollEvents = liftIO $ alloca $ \ep -> do
 searchFingers :: (MonadState s m, HasInput s) => TouchID -> m (Maybe MultiFingers)
 searchFingers touchID = uses fingers $ \fs ->
   case fs ^@.. ifolded . filtered ((==touchID) . view fingerDevice) of
-    [(id1,f1),(id2,f2)] -> Just (MultiFingers touchID id1 id2)
-    _                   -> Nothing
+    [(id1,_),(id2,_)] -> Just (MultiFingers touchID id1 id2)
+    _                 -> Nothing
 
 lookupFingers
   :: (MonadState s m, HasInput s)

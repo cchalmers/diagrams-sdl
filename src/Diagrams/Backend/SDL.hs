@@ -18,58 +18,34 @@
 --
 --
 --
-module Diagrams.SDL where
+module Diagrams.Backend.SDL where
 
 import           Control.Concurrent
 import           Control.Exception
 import           Control.Lens
-import           Data.Bits.Lens
-import           Data.Bool
 import           Data.Default
-import           Data.Fixed                 (mod')
 import qualified Data.Foldable              as F
-import           Data.Map                   (Map)
-import qualified Data.Map                   as Map
-import           Data.Maybe                 (fromMaybe)
-import           Data.Semigroup
-import           Data.Set                   (Set)
 import           Foreign                    hiding (rotate)
 import           Foreign.C.String
 import           Graphics.GL
 import           Linear.Affine
-import           System.FilePath            ((</>))
-
 
 import           Control.Monad              (unless, when)
 import           Control.Monad.State        hiding (get)
-import qualified Data.ByteString            as BS
-import           Data.Distributive
 import           Data.StateVar
 import           Data.Typeable
-import qualified Data.Vector.Storable       as S
 import           Foreign.C
 import           Linear
 import qualified SDL.Raw                    as SDL
 import           SDL.Raw.Enum
-import           SDL.Raw.Types              hiding (Point, fingerX, fingerY)
 
 import qualified Diagrams.Prelude           as D
-import qualified Diagrams.ThreeD.Attributes as D
-import qualified Diagrams.ThreeD.Light      as D
-import qualified Diagrams.Types.Style       as D
-import qualified Geometry.ThreeD.Shapes     as D
 
 import           Diagrams.Backend.GL
-import           Diagrams.SDL.Input
-
--- In version 3 I matched multitouch events with fingers.
---
--- In multitouch4 I've tried to change the camera to use yaw, pitch and
--- roll but failed miserably. I'll move on to something else and come
--- back to this....
+import           Diagrams.Backend.SDL.Input
 
 ------------------------------------------------------------------------
--- Input handling
+-- Camera
 ------------------------------------------------------------------------
 
 -- Perspective camera
@@ -145,15 +121,6 @@ r3SphericalIso = zxy . iso
   where
   zxy = iso (\(V3 x y z) -> V3 z x y) (\(V3 z x y) -> (V3 x y z))
 
-data Locations = Locations
-  { _mvpLocation    :: !GLint
-  , _viewLocation   :: !GLint
-  , _lightLocation  :: !GLint
-  , _colourLocation :: !GLint
-  }
-
-makeClassy ''Locations
-
 data Info = Info
   { _stateCamera      :: !Camera
   , _shouldClose      :: !Bool
@@ -175,7 +142,7 @@ instance HasInput Info where
   input = infoInput
 
 initialState :: (ProgramInfo, LineProgram, RenderInfo) -> Info
-initialState info = Info
+initialState i = Info
   { _stateCamera   = def
   , _shouldClose   = False
   , _shouldRedraw  = True
@@ -183,24 +150,9 @@ initialState info = Info
   , _inFocus       = True
   , _shown         = True
   , _infoInput     = def
-  , _infoInfo      = info
+  , _infoInfo      = i
   , _infoMultiGesture  = NoGesture
   }
-
-searchFingers :: (MonadState s m, HasInput s, HasInfo s) => TouchID -> m (Maybe MultiFingers)
-searchFingers touchID = uses fingers $ \fs ->
-  case fs ^@.. ifolded . filtered ((==touchID) . view fingerDevice) of
-    [(id1,f1),(id2,f2)] -> Just (MultiFingers touchID id1 id2)
-    _                   -> Nothing
-
-lookupFingers
-  :: (MonadState s m, HasInput s, HasInfo s)
-  => MultiFingers
-  -> m (Maybe (FingerInfo, FingerInfo))
-lookupFingers fs = do
-  mf1 <- use (fingers.at (fs^.finger1))
-  mf2 <- use (fingers.at (fs^.finger2))
-  pure $ liftM2 (,) mf1 mf2
 
 updateCamera :: (MonadState s m, HasCamera s) => Movement -> m ()
 updateCamera m = do
@@ -349,19 +301,18 @@ gl window dia = do
   glClearColor 0 0 0 1
   glClear $ GL_COLOR_BUFFER_BIT .|. GL_STENCIL_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT
 
-  basicProg <- initProgram
-  lineProg  <- lineProgram
-  render <- runRender (toRender mempty dia)
+  -- basicProg <- initProgram
+  -- lineProg  <- lineProgram
+  -- render <- runRender (toRender mempty dia)
 
-  info <- diagramRender dia
+  inf <- diagramRender dia
 
-  flip evalStateT (initialState info) $ do
+  flip evalStateT (initialState inf) $ do
     let kernel = do
           shouldRedraw .= False
 
           events <- pollEvents
           F.for_ events handleInputEvent
-          mj <- use multiGesture
           movement <- orbitalMovement
           when (movement /= def) $ do
             updateCamera movement
@@ -383,6 +334,10 @@ gl window dia = do
     draw window
     kernel
 
+------------------------------------------------------------------------
+-- Debugging
+------------------------------------------------------------------------
+
 ppMovement :: Movement -> IO ()
 ppMovement m = do
   putStrLn $ "forward:   " ++ padShow (_moveForward m)
@@ -395,7 +350,7 @@ ppMovement m = do
 
 ppGesture :: MultiGesture -> IO ()
 ppGesture NoGesture = putStrLn "No gesture"
-ppGesture (UndecidedGesture _ z t p m)
+ppGesture (UndecidedGesture _ z t _ _)
                           = putStrLn $ "Undecided: " ++ padShow z ++ padShow t
 ppGesture (ZoomGesture _ z) = putStrLn $ "Zoom:      " ++ padShow z
 ppGesture (RotateGesture _ r) = putStrLn $ "Rotate:    " ++ padShow r
