@@ -1,13 +1,13 @@
-{-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE PatternGuards         #-}
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TypeFamilies          #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Diagrams.Backend.SDL
@@ -28,33 +28,25 @@ import qualified Data.Foldable              as F
 import           Foreign                    hiding (rotate)
 import           Graphics.GL
 import           Linear.Affine
-import qualified Options.Applicative          as OP
-import qualified Options.Applicative.Types    as OP (readerAsk)
-
-
+import qualified Options.Applicative        as OP
+import qualified Options.Applicative.Types  as OP (readerAsk)
 import           Control.Monad              (unless, when)
 import           Control.Monad.State        hiding (get)
 import           Linear
-import qualified SDL.Raw                    as SDL
-import           SDL.Raw.Enum
+
+import           Geometry.Space
+import           Geometry.ThreeD.Camera
+import           Geometry.ThreeD.Transform
+import           Geometry.TwoD.Size         as D
 
 import qualified Diagrams.Prelude           as D
-
-import Geometry.ThreeD.Camera
-import Geometry.ThreeD.Transform
-import Geometry.TwoD.Size as D
-import Geometry.Space
-
-import Diagrams.Backend
--- import Data.Constraint
-
--- import           Diagrams.Backend
+import           Diagrams.Backend
 import           Diagrams.Backend.GL
--- import           Diagrams.Backend.GL.Basic
--- import           Diagrams.Backend.GL.Lines
-
 import           Diagrams.Backend.SDL.Input
 import           Diagrams.Backend.SDL.Util
+
+import qualified SDL.Raw                    as SDL
+import           SDL.Raw.Enum
 
 ------------------------------------------------------------------------
 -- Types
@@ -258,8 +250,6 @@ mainSDL opts dia = do
   context <- sdlGlContext window
   render  <- diagramRender dia
   let state0 = mkInitialState render
-  -- let inf' = DrawInfo a b c
-  --     s0   = initialState
 
   let ls = _renderLines $ view renderScene render
   liftIO (print $ length ls)
