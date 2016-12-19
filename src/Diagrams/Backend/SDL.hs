@@ -251,9 +251,6 @@ mainSDL opts dia = do
   render  <- diagramRender dia
   let state0 = mkInitialState render
 
-  let ls = _renderLines $ view renderScene render
-  liftIO (print $ length ls)
-
   gl window state0
 
   glFinish
@@ -274,6 +271,7 @@ draw window = do
   let mats = CameraMatrices viewMat projectionMatrix
 
   render <- use renderInfo
+  liftIO $ drawScene mats render
 
   SDL.glSwapWindow window
 
