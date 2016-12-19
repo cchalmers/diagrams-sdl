@@ -16,6 +16,7 @@ library
   exposed-modules:
     Diagrams.Backend.SDL
     Diagrams.Backend.SDL.Input
+    Diagrams.Backend.SDL.Util
   -- other-modules:       
   other-extensions:
     LambdaCase MultiParamTypeClasses OverloadedStrings PatternGuards
@@ -34,6 +35,8 @@ library
     vector >=0.11 && <0.12,
     diagrams-gl,
     gl,
+    constraints,
+    optparse-applicative,
     geometry,
     sdl2,
     diagrams

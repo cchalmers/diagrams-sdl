@@ -279,6 +279,47 @@ makeLenses ''Movement
 instance Default Movement where
   def = Movement 0 0 0 0 0 0 0 0 0
 
+firstPersonMovement :: (MonadState s m, HasInput s) => m Movement
+firstPersonMovement = do
+  i <- use input
+
+  -- clear relative inputs
+  fingers.each.fingerRel .= zero
+  mouseRel .= zero
+  multiGesture %= \case
+    ZoomGesture fs _   -> ZoomGesture fs 0
+    RotateGesture fs _ -> RotateGesture fs 0
+    MoveGesture fs p _ -> MoveGesture fs p 0
+    g                  -> g
+
+  return $ def &~ do
+
+    -- key movements
+    let codes = i^.scancodes
+    let whenKey k s = when (codes^.contains k) s
+    whenKey SDL_SCANCODE_W     $ moveForward += 1
+    whenKey SDL_SCANCODE_S     $ moveForward -= 1
+    whenKey SDL_SCANCODE_A     $ moveRight   -= 1
+    whenKey SDL_SCANCODE_D     $ moveRight   += 1
+    whenKey SDL_SCANCODE_X     $ moveUp      -= 1
+    whenKey SDL_SCANCODE_SPACE $ moveUp      += 1
+
+    -- mouse movements
+    let mouseDown = view (mouseButtons . contains SDL_BUTTON_LEFT) i
+    when mouseDown $ do
+      let V2 x y = views mouseRel (fmap fromIntegral) i
+      turnRight .= x
+      turnUp    .= y
+
+    -- multitouch
+    case i^.multiGesture of
+      ZoomGesture _ z          -> moveZoom += z
+      RotateGesture _ a        -> turnRoll += a
+      MoveGesture _ _ (V2 x y) -> do moveRight += 50*x
+                                     moveUp    -= 50*y
+      _                        -> return ()
+
+
 orbitalMovement :: (MonadState s m, HasInput s) => m Movement
 orbitalMovement = do
   i <- use input
@@ -318,4 +359,5 @@ orbitalMovement = do
       MoveGesture _ _ (V2 x y) -> do moveRight += 50*x
                                      moveUp    -= 50*y
       _                        -> return ()
+
 
