@@ -58,6 +58,7 @@ data SDLState = SDLState
   { _stateCamera      :: !Cam
   , _shouldClose      :: !Bool
   , _shouldRedraw     :: !Bool
+  , _mouseDownPos     :: !(Maybe (V2 Int32))
   , _inFocus          :: !Bool
   , _shown            :: !Bool
   , _infoInput        :: !Input
@@ -86,6 +87,7 @@ mkInitialState i = SDLState
   , _shouldClose   = False
   , _shouldRedraw  = True
   , _inFocus       = True
+  , _mouseDownPos  = Nothing
   , _shown         = True
   , _infoInput     = def
   , _sdlDrawInfo   = i
@@ -291,14 +293,17 @@ gl window sdlstate = do
     let kernel = do
           shouldRedraw .= False
 
+          -- events
           events <- pollEvents
           F.for_ events handleInputEvent
+
+          F.for_ events (handleRelativeMouse window)
+
+          -- movement
           movement <- firstPersonMovement
           when (movement /= def) $ do
             updateCameraFP movement
             shouldRedraw .= True
-
-          use (mouseButtons . contains SDL_BUTTON_LEFT) >>= SDL.captureMouse >>= err
 
           escPressed <- use (keycode SDLK_ESCAPE)
           qPressed   <- use (keycode SDLK_q)
@@ -313,6 +318,23 @@ gl window sdlstate = do
 
     draw window
     kernel
+
+handleRelativeMouse
+  :: (MonadIO m, HasSDLState s, MonadState s m)
+  => SDL.Window -> SDL.Event -> m ()
+handleRelativeMouse w = \case
+  SDL.MouseButtonEvent SDL_MOUSEBUTTONDOWN _ _ _mouse button _ _ x y ->
+    when (button == SDL_BUTTON_LEFT) $ do
+       SDL.setRelativeMouseMode True >>= err
+       mouseDownPos ?= V2 x y
+  SDL.MouseButtonEvent SDL_MOUSEBUTTONUP _ _ _mouse button _ _ _ _ ->
+    when (button == SDL_BUTTON_LEFT) $ do
+       SDL.setRelativeMouseMode False >>= err
+       startingMousePos <- mouseDownPos <<.= Nothing
+       F.for_ startingMousePos $ \(V2 x y) ->
+         SDL.warpMouseInWindow w (fromIntegral x) (fromIntegral y)
+
+  _ -> return ()
 
 (.||.) :: Monad m => m Bool -> m Bool -> m Bool
 (.||.) ma mb = do
