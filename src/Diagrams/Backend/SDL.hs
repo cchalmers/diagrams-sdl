@@ -135,8 +135,8 @@ defaultCamera :: Camera PerspectiveLens Float
 defaultCamera = mm50Camera
   & cameraLens .~ (PerspectiveLens (3*pi/8 D.@@ D.rad) (4/3 D.@@ D.rad) 0.1 500)
 
-instance Parseable (Options SDL) where
-  parser =
+optionsParser :: OP.Parser (Options SDL)
+optionsParser =
     SDLOptions <$> camParser
                <*> wsizeParser
                <*> thirdPersonParser
@@ -187,7 +187,7 @@ instance Parseable (Options SDL) where
 
 instance RenderOutcome SDL (D.Diagram V3) where
   type MainOpts SDL (D.Diagram V3) = Options SDL
-  resultParser _ _ = parser
+  resultParser _ _ = optionsParser
   renderOutcome _ = mainSDL
 
 ------------------------------------------------------------------------
