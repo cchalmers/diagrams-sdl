@@ -41,7 +41,7 @@ import           Geometry.TwoD.Size         as D
 
 import qualified Diagrams.Prelude           as D
 import           Diagrams.Backend
-import           Diagrams.Backend.GL
+import           Diagrams.Backend.GL hiding (windowSize)
 import           Diagrams.Backend.SDL.Input
 import           Diagrams.Backend.SDL.Util
 
@@ -59,6 +59,7 @@ data SDLState = SDLState
   , _shouldClose      :: !Bool
   , _shouldRedraw     :: !Bool
   , _mouseDownPos     :: !(Maybe (V2 Int32))
+  , _windowSize       :: !(V2 Int)
   , _inFocus          :: !Bool
   , _shown            :: !Bool
   , _infoInput        :: !Input
@@ -80,14 +81,15 @@ instance HasRenderInfo SDLState where
 instance HasInput SDLState where
   input = infoInput
 
-mkInitialState :: RenderInfo -> SDLState
-mkInitialState i = SDLState
+mkInitialState :: V2 Int -> RenderInfo -> SDLState
+mkInitialState sz i = SDLState
   { _stateCamera   = mm50Camera
       & cameraLens .~ (PerspectiveLens (3*pi/8 D.@@ D.rad) (4/3 D.@@ D.rad) 0.1 500)
   , _shouldClose   = False
   , _shouldRedraw  = True
   , _inFocus       = True
   , _mouseDownPos  = Nothing
+  , _windowSize    = sz
   , _shown         = True
   , _infoInput     = def
   , _sdlDrawInfo   = i
@@ -203,7 +205,7 @@ speedLimit l v
 updateCameraFP :: (MonadState s m, HasCamera s) => Movement -> m ()
 updateCameraFP m = do
   let movespeed  = 0.03
-  let orbitspeed = 0.01
+  let orbitspeed = 0.005
 
   (forward,right) <- uses camera camForwardRight
 
@@ -251,7 +253,7 @@ mainSDL opts dia = do
   window  <- defaultSdlWindow (opts^.sdlTitle) (opts^.sdlSize)
   context <- sdlGlContext window
   render  <- diagramRender dia
-  let state0 = mkInitialState render
+  let state0 = mkInitialState (opts^.sdlSize) render
 
   gl window state0
 
@@ -261,16 +263,26 @@ mainSDL opts dia = do
 
 draw
   :: (MonadIO m, MonadState s m, HasCamera s, HasRenderInfo s)
-  => SDL.Window -> m ()
-draw window = do
+  => SDL.Window -> V2 Int -> m ()
+draw window _sz = do
   glClearColor 0.8 0.8 0.8 1
   glClear $ GL_COLOR_BUFFER_BIT .|. GL_STENCIL_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT
 
   cam <- use camera
 
+  sz <- liftIO $
+    alloca $ \wPtr ->
+    alloca $ \hPtr -> do
+      SDL.getWindowSize window wPtr hPtr
+      w <- peek wPtr
+      h <- peek hPtr
+      return (fromIntegral <$> V2 w h)
+
+  -- print sz
+
   let viewMat          = cameraView cam
   let projectionMatrix = lensProjection cam
-  let mats = CameraMatrices viewMat projectionMatrix
+  let mats = SceneView sz viewMat projectionMatrix
 
   render <- use renderInfo
   liftIO $ drawScene mats render
@@ -282,7 +294,7 @@ gl window sdlstate = do
 
   glEnable GL_DEPTH_TEST
   glDepthFunc GL_LESS
-  glEnable GL_CULL_FACE
+  -- glEnable GL_CULL_FACE
 
   glClearColor 0 0 0 1
   glClear $  GL_COLOR_BUFFER_BIT
@@ -299,6 +311,11 @@ gl window sdlstate = do
 
           F.for_ events (handleRelativeMouse window)
 
+          use (sDLState.newWindowSize) >>= \msz -> F.for_ msz $ \sz -> do
+            windowSize   .= sz
+            shouldRedraw .= True
+            liftIO $ putStrLn $ "new size of " ++ show sz
+
           -- movement
           movement <- firstPersonMovement
           when (movement /= def) $ do
@@ -310,13 +327,14 @@ gl window sdlstate = do
           when (escPressed || qPressed) $ shouldClose .= True
 
           doRedraw <- use shouldRedraw
+          sz <- use windowSize
           if doRedraw
-            then draw window
+            then draw window sz
             else liftIO $ threadDelay 16000
 
           unlessM (use shouldClose .||. SDL.quitRequested) kernel
 
-    draw window
+    draw window (sdlstate^.windowSize)
     kernel
 
 handleRelativeMouse

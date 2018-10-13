@@ -17,12 +17,14 @@ import           Data.Map            (Map)
 import           Data.Maybe          (fromMaybe, isJust)
 import           Data.Set            (Set)
 import           Foreign             hiding (rotate)
-import           Linear
+import           Linear hiding (trace)
 import           Linear.Affine
 
 import qualified SDL.Raw             as SDL
 import           SDL.Raw.Enum
 import           SDL.Raw.Types       hiding (Point, fingerX, fingerY)
+
+import Debug.Trace
 
 ------------------------------------------------------------------------
 -- Input handling
@@ -103,6 +105,7 @@ data Input = Input
   , _mouseWheel      :: !(V2 Int32) -- relative since last reset
   , _multiGesture    :: !MultiGesture
   , _fingers         :: !(Map FingerID FingerInfo)
+  , _newWindowSize   :: !(Maybe (V2 Int))
   } deriving Show
 
 makeClassy ''Input
@@ -118,6 +121,7 @@ instance Default Input where
     , _mouseWheel      = zero
     , _multiGesture    = NoGesture
     , _fingers         = mempty
+    , _newWindowSize      = Nothing
     }
 
 -- | Lens onto whether the keycode is currently pressed.
@@ -136,6 +140,13 @@ mkP2 a b = P (V2 a b)
 
 handleInputEvent :: (MonadState s m, HasInput s) => SDL.Event -> m ()
 handleInputEvent = \case
+
+  -- XXX WHY IS THIS NOT WORKING
+  WindowEvent SDL_WINDOWEVENT_RESIZED _ _ _ w h ->
+    trace "resize event" newWindowSize ?= V2 (fromIntegral w) (fromIntegral h)
+
+  WindowEvent SDL_WINDOWEVENT_SIZE_CHANGED _ _ _ w h ->
+    trace "size changed event" newWindowSize ?= V2 (fromIntegral w) (fromIntegral h)
 
   KeyboardEvent SDL_KEYDOWN _ _ _ _ (Keysym sc kc _) -> do
     keycode kc  .= True
@@ -163,7 +174,7 @@ handleInputEvent = \case
         mouseButtons.contains button .= False
         mouseButtonMask.bitAt (fromIntegral button) .= False
 
-  MouseWheelEvent SDL_MOUSEWHEEL _ _ mouse x y
+  MouseWheelEvent SDL_MOUSEWHEEL _ _ mouse x y _
     | mouse /= SDL_TOUCH_MOUSEID ->
         mouseWheel += V2 x y
 
