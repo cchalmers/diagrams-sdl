@@ -115,7 +115,7 @@ instance Backend SDL where
     , _sdlTitle      :: String
     , _sdlBgColour   :: D.Colour Double
     }
-  renderDiaT _ _ = (return (), mempty)
+  renderDiaT _ _ = (zero, mempty, pure ())
   backendInfo _ = BackendInfo
     { backendModuleName  = "diagrams-sdl"
     , backendTokenName   = "SDL"
